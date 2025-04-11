@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Bell,
   FileText,
@@ -8,6 +8,7 @@ import {
   Search,
   Send,
   User,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,99 +27,190 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-
-// Mock data for messages
-const mockMessages = [
-  {
-    id: 1,
-    child: "Emma Wilson",
-    parent: "Michelle Wilson",
-    subject: "Pickup arrangements for Friday",
-    preview: "Hi, my husband will be picking Emma up on Friday as I have a doctor's appointment...",
-    date: "10 mins ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    child: "Noah Smith",
-    parent: "Jessica Smith",
-    subject: "Allergies update",
-    preview: "I wanted to let you know that Noah's allergy test results came back and he's no longer allergic to...",
-    date: "2 hours ago",
-    unread: true,
-  },
-  {
-    id: 3,
-    child: "Olivia Davis",
-    parent: "Sarah Davis",
-    subject: "Thank you!",
-    preview: "I just wanted to say thank you for the wonderful art project Olivia brought home yesterday...",
-    date: "Yesterday",
-    unread: false,
-  },
-  {
-    id: 4,
-    child: "Liam Johnson",
-    parent: "Emily Johnson",
-    subject: "Absence next week",
-    preview: "Liam will be absent next Monday and Tuesday as we'll be visiting family out of town...",
-    date: "2 days ago",
-    unread: false,
-  },
-  {
-    id: 5,
-    child: "Sophia Brown",
-    parent: "Rebecca Brown",
-    subject: "Question about progress",
-    preview: "I was wondering if we could set up a quick meeting to discuss Sophia's progress in reading...",
-    date: "3 days ago",
-    unread: false,
-  },
-];
-
-// Mock conversation thread
-const mockConversation = [
-  {
-    id: 101,
-    sender: "Michelle Wilson",
-    role: "parent",
-    message: "Hi, my husband will be picking Emma up on Friday as I have a doctor's appointment. His name is John Wilson and he's on the emergency contacts list.",
-    date: "Today, 9:45 AM",
-  },
-  {
-    id: 102,
-    sender: "Sarah Johnson",
-    role: "staff",
-    message: "Thank you for letting me know! Yes, I can see John is on Emma's approved pickup list, so that won't be a problem at all.",
-    date: "Today, 10:15 AM",
-  },
-  {
-    id: 103,
-    sender: "Michelle Wilson",
-    role: "parent",
-    message: "Great, thank you! Also, Emma has been talking about a special art project she's working on. Is there anything she needs to bring from home for that?",
-    date: "Today, 10:30 AM",
-  },
-  {
-    id: 104,
-    sender: "Sarah Johnson",
-    role: "staff",
-    message: "Emma is doing wonderfully with her art project! We're creating family portraits this week. Everything is provided here, but if she wants to bring in a family photo for reference, that would be lovely!",
-    date: "Today, 11:20 AM",
-  },
-];
+import { format } from "date-fns";
+import { communicationApi, childrenApi } from "@/services/api";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Communication() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [selectedParent, setSelectedParent] = useState<string>("");
+  const [messageSubject, setMessageSubject] = useState("");
+  const [messageContent, setMessageContent] = useState("");
+  const [isNewMessageOpen, setIsNewMessageOpen] = useState(false);
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementContent, setAnnouncementContent] = useState("");
+  const [announcementPriority, setAnnouncementPriority] = useState("normal");
   
-  const handleSendReply = () => {
-    if (replyText.trim()) {
-      // In a real app, this would send the message to the backend
-      toast.success("Message sent successfully!");
+  const { user } = useAuth();
+  
+  // Fetch all messages
+  const { 
+    data: messages = [], 
+    isLoading: messagesLoading, 
+    isError: messagesError,
+    refetch: refetchMessages
+  } = useQuery({
+    queryKey: ['messages'],
+    queryFn: communicationApi.getAllMessages,
+  });
+  
+  // Fetch all announcements
+  const { 
+    data: announcements = [], 
+    isLoading: announcementsLoading, 
+    isError: announcementsError,
+    refetch: refetchAnnouncements
+  } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: communicationApi.getAnnouncements,
+  });
+  
+  // Fetch all children (to get parent information)
+  const { 
+    data: children = [], 
+    isLoading: childrenLoading 
+  } = useQuery({
+    queryKey: ['children'],
+    queryFn: childrenApi.getAllChildren,
+  });
+  
+  // Send message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: communicationApi.sendMessage,
+    onSuccess: () => {
+      refetchMessages();
+      setIsNewMessageOpen(false);
+      resetMessageForm();
+    }
+  });
+  
+  // Send reply mutation
+  const sendReplyMutation = useMutation({
+    mutationFn: communicationApi.sendMessage,
+    onSuccess: () => {
+      refetchMessages();
       setReplyText("");
     }
+  });
+  
+  // Send announcement mutation
+  const sendAnnouncementMutation = useMutation({
+    mutationFn: communicationApi.sendAnnouncement,
+    onSuccess: () => {
+      refetchAnnouncements();
+      setIsAnnouncementOpen(false);
+      resetAnnouncementForm();
+    }
+  });
+  
+  // Reset form functions
+  const resetMessageForm = () => {
+    setSelectedParent("");
+    setMessageSubject("");
+    setMessageContent("");
+  };
+  
+  const resetAnnouncementForm = () => {
+    setAnnouncementTitle("");
+    setAnnouncementContent("");
+    setAnnouncementPriority("normal");
+  };
+  
+  // Extract unique parents from children data
+  const parents = children.reduce((acc: any[], child: any) => {
+    const parent = child.parentDetails;
+    if (parent) {
+      const existingParent = acc.find(p => p.id === parent._id);
+      if (!existingParent) {
+        acc.push({
+          id: parent._id,
+          name: `${parent.firstName} ${parent.lastName}`,
+          email: parent.email,
+          childName: `${child.firstName} ${child.lastName}`
+        });
+      }
+    }
+    return acc;
+  }, []);
+  
+  // Filter messages based on search term
+  const filteredMessages = messages.filter((message: any) => {
+    const content = message.content.toLowerCase();
+    const subject = message.subject.toLowerCase();
+    const senderName = `${message.sender.firstName} ${message.sender.lastName}`.toLowerCase();
+    const search = searchTerm.toLowerCase();
+    
+    return content.includes(search) || subject.includes(search) || senderName.includes(search);
+  });
+  
+  // Handle sending a new message
+  const handleSendMessage = () => {
+    if (!selectedParent || !messageSubject || !messageContent) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    sendMessageMutation.mutate({
+      recipient: selectedParent,
+      subject: messageSubject,
+      content: messageContent,
+      sender: user?._id
+    });
+  };
+  
+  // Handle replying to a message
+  const handleSendReply = () => {
+    if (!replyText.trim() || !selectedMessage) return;
+    
+    sendReplyMutation.mutate({
+      recipient: selectedMessage.sender._id,
+      subject: `Re: ${selectedMessage.subject}`,
+      content: replyText,
+      sender: user?._id,
+      parentMessage: selectedMessage._id
+    });
+  };
+  
+  // Handle sending an announcement
+  const handleSendAnnouncement = () => {
+    if (!announcementTitle || !announcementContent) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    sendAnnouncementMutation.mutate({
+      title: announcementTitle,
+      content: announcementContent,
+      priority: announcementPriority,
+      sender: user?._id
+    });
+  };
+
+  // Get child name from parent ID
+  const getChildNameFromParent = (parentId: string) => {
+    const childInfo = children.find((child: any) => 
+      child.parentDetails && child.parentDetails._id === parentId
+    );
+    return childInfo ? `${childInfo.firstName} ${childInfo.lastName}` : "Unknown Child";
+  };
+  
+  // Format relative time
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    const diffHours = Math.round(diffMs / 3600000);
+    const diffDays = Math.round(diffMs / 86400000);
+    
+    if (diffMins < 60) return `${diffMins} mins ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays === 1) return "Yesterday";
+    return format(date, "MMM d, yyyy");
   };
 
   return (
@@ -131,7 +223,7 @@ export default function Communication() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Dialog>
+          <Dialog open={isNewMessageOpen} onOpenChange={setIsNewMessageOpen}>
             <DialogTrigger asChild>
               <Button className="bg-kiddo-blue hover:bg-kiddo-blue-dark">
                 <Plus className="mr-2 h-4 w-4" />
@@ -145,22 +237,27 @@ export default function Communication() {
               <div className="grid gap-4 py-4">
                 <div className="space-y-2">
                   <label htmlFor="recipient" className="text-sm font-medium">To (Parent)</label>
-                  <Select>
+                  <Select value={selectedParent} onValueChange={setSelectedParent}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select parent" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="michelle">Michelle Wilson (Emma's parent)</SelectItem>
-                      <SelectItem value="jessica">Jessica Smith (Noah's parent)</SelectItem>
-                      <SelectItem value="sarah">Sarah Davis (Olivia's parent)</SelectItem>
-                      <SelectItem value="emily">Emily Johnson (Liam's parent)</SelectItem>
-                      <SelectItem value="rebecca">Rebecca Brown (Sophia's parent)</SelectItem>
+                      {parents.map((parent: any) => (
+                        <SelectItem key={parent.id} value={parent.id}>
+                          {parent.name} ({parent.childName}'s parent)
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="subject" className="text-sm font-medium">Subject</label>
-                  <Input id="subject" placeholder="Enter message subject" />
+                  <Input 
+                    id="subject" 
+                    placeholder="Enter message subject" 
+                    value={messageSubject}
+                    onChange={(e) => setMessageSubject(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="message" className="text-sm font-medium">Message</label>
@@ -168,6 +265,8 @@ export default function Communication() {
                     id="message" 
                     placeholder="Type your message here..." 
                     rows={6}
+                    value={messageContent}
+                    onChange={(e) => setMessageContent(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -183,13 +282,19 @@ export default function Communication() {
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <Button variant="outline">Cancel</Button>
-                <Button className="bg-kiddo-blue hover:bg-kiddo-blue-dark">Send Message</Button>
+                <Button variant="outline" onClick={() => setIsNewMessageOpen(false)}>Cancel</Button>
+                <Button 
+                  className="bg-kiddo-blue hover:bg-kiddo-blue-dark"
+                  onClick={handleSendMessage}
+                  disabled={sendMessageMutation.isPending}
+                >
+                  {sendMessageMutation.isPending ? "Sending..." : "Send Message"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
           
-          <Dialog>
+          <Dialog open={isAnnouncementOpen} onOpenChange={setIsAnnouncementOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Bell className="mr-2 h-4 w-4" />
@@ -215,7 +320,12 @@ export default function Communication() {
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="announcement-title" className="text-sm font-medium">Title</label>
-                  <Input id="announcement-title" placeholder="Enter announcement title" />
+                  <Input 
+                    id="announcement-title" 
+                    placeholder="Enter announcement title" 
+                    value={announcementTitle}
+                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="announcement" className="text-sm font-medium">Announcement</label>
@@ -223,11 +333,13 @@ export default function Communication() {
                     id="announcement" 
                     placeholder="Type your announcement here..." 
                     rows={6}
+                    value={announcementContent}
+                    onChange={(e) => setAnnouncementContent(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Priority Level</label>
-                  <Select defaultValue="normal">
+                  <Select value={announcementPriority} onValueChange={setAnnouncementPriority}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -240,8 +352,14 @@ export default function Communication() {
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <Button variant="outline">Cancel</Button>
-                <Button className="bg-kiddo-blue hover:bg-kiddo-blue-dark">Send Announcement</Button>
+                <Button variant="outline" onClick={() => setIsAnnouncementOpen(false)}>Cancel</Button>
+                <Button 
+                  className="bg-kiddo-blue hover:bg-kiddo-blue-dark"
+                  onClick={handleSendAnnouncement}
+                  disabled={sendAnnouncementMutation.isPending}
+                >
+                  {sendAnnouncementMutation.isPending ? "Sending..." : "Send Announcement"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -269,43 +387,65 @@ export default function Communication() {
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  {mockMessages.map((message) => (
-                    <button
-                      key={message.id}
-                      className={`w-full text-left p-3 rounded-md hover:bg-muted/80 transition-colors ${
-                        selectedMessage?.id === message.id ? "bg-muted" : ""
-                      }`}
-                      onClick={() => setSelectedMessage(message)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-kiddo-blue-light text-kiddo-blue flex items-center justify-center font-medium">
-                            {message.parent.charAt(0)}
+                {messagesLoading ? (
+                  <div className="flex justify-center items-center p-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading messages...</span>
+                  </div>
+                ) : messagesError ? (
+                  <div className="text-center p-12">
+                    <p className="text-destructive">Failed to load messages</p>
+                    <Button variant="outline" onClick={() => refetchMessages()} className="mt-4">
+                      Retry
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredMessages.map((message: any) => (
+                      <button
+                        key={message._id}
+                        className={`w-full text-left p-3 rounded-md hover:bg-muted/80 transition-colors ${
+                          selectedMessage?._id === message._id ? "bg-muted" : ""
+                        }`}
+                        onClick={() => setSelectedMessage(message)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-kiddo-blue-light text-kiddo-blue flex items-center justify-center font-medium">
+                              {message.sender.firstName.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {message.sender.firstName} {message.sender.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Re: {getChildNameFromParent(message.sender._id)}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{message.parent}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Re: {message.child}
-                            </p>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-muted-foreground">
+                              {formatRelativeTime(message.createdAt)}
+                            </span>
+                            {!message.read && (
+                              <div className="w-2 h-2 mt-1 rounded-full bg-kiddo-blue"></div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs text-muted-foreground">
-                            {message.date}
-                          </span>
-                          {message.unread && (
-                            <div className="w-2 h-2 mt-1 rounded-full bg-kiddo-blue"></div>
-                          )}
-                        </div>
+                        <p className="mt-1 text-sm font-medium">{message.subject}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                          {message.content}
+                        </p>
+                      </button>
+                    ))}
+
+                    {filteredMessages.length === 0 && (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground">No messages found</p>
                       </div>
-                      <p className="mt-1 text-sm font-medium">{message.subject}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
-                        {message.preview}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div className="md:w-2/3 p-4 flex flex-col h-full overflow-hidden">
@@ -315,7 +455,7 @@ export default function Communication() {
                       <h3 className="text-lg font-medium">{selectedMessage.subject}</h3>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <span>
-                          Conversation with {selectedMessage.parent} about {selectedMessage.child}
+                          Conversation with {selectedMessage.sender.firstName} {selectedMessage.sender.lastName} about {getChildNameFromParent(selectedMessage.sender._id)}
                         </span>
                       </div>
                     </div>
@@ -323,27 +463,44 @@ export default function Communication() {
                     <Separator className="my-4" />
                     
                     <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                      {mockConversation.map((msg) => (
-                        <div key={msg.id} className={`flex ${msg.role === 'staff' ? 'justify-end' : ''}`}>
-                          <div className={`max-w-[80%] rounded-lg p-4 ${
-                            msg.role === 'staff' 
-                              ? 'bg-kiddo-blue/10 text-foreground' 
-                              : 'bg-muted'
-                          }`}>
+                      {/* Original message */}
+                      <div className="flex">
+                        <div className="max-w-[80%] rounded-lg p-4 bg-muted">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-6 h-6 rounded-full bg-kiddo-orange-light text-kiddo-orange-dark flex items-center justify-center text-xs font-medium">
+                              {selectedMessage.sender.firstName.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {selectedMessage.sender.firstName} {selectedMessage.sender.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatRelativeTime(selectedMessage.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm">{selectedMessage.content}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Replies would be loaded here */}
+                      {selectedMessage.replies && selectedMessage.replies.map((reply: any) => (
+                        <div key={reply._id} className="flex justify-end">
+                          <div className="max-w-[80%] rounded-lg p-4 bg-kiddo-blue/10">
                             <div className="flex items-center gap-2 mb-1">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                                msg.role === 'staff'
-                                  ? 'bg-kiddo-blue text-white'
-                                  : 'bg-kiddo-orange-light text-kiddo-orange-dark'
-                              }`}>
-                                {msg.sender.charAt(0)}
+                              <div className="w-6 h-6 rounded-full bg-kiddo-blue text-white flex items-center justify-center text-xs font-medium">
+                                {reply.sender.firstName.charAt(0)}
                               </div>
                               <div>
-                                <p className="text-sm font-medium">{msg.sender}</p>
-                                <p className="text-xs text-muted-foreground">{msg.date}</p>
+                                <p className="text-sm font-medium">
+                                  {reply.sender.firstName} {reply.sender.lastName}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatRelativeTime(reply.createdAt)}
+                                </p>
                               </div>
                             </div>
-                            <p className="text-sm">{msg.message}</p>
+                            <p className="text-sm">{reply.content}</p>
                           </div>
                         </div>
                       ))}
@@ -359,9 +516,13 @@ export default function Communication() {
                       <Button 
                         className="absolute bottom-2 right-2 h-8 w-8 p-0"
                         onClick={handleSendReply}
-                        disabled={!replyText.trim()}
+                        disabled={!replyText.trim() || sendReplyMutation.isPending}
                       >
-                        <Send className="h-4 w-4" />
+                        {sendReplyMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </>
@@ -398,77 +559,47 @@ export default function Communication() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-medium">Spring Festival Next Friday</h3>
-                  <Badge className="bg-green-100 text-green-800 border-green-300 border">
-                    Normal
-                  </Badge>
+              {announcementsLoading ? (
+                <div className="flex justify-center items-center p-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading announcements...</span>
                 </div>
-                <p className="text-sm">
-                  We're excited to announce our Spring Festival next Friday from 2pm-4pm. 
-                  Children will be performing songs and displaying their artwork. Parents are 
-                  encouraged to attend and bring a small snack to share.
-                </p>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Sent to: All Parents</span>
-                  <span>April 5, 2025</span>
+              ) : announcementsError ? (
+                <div className="text-center p-12">
+                  <p className="text-destructive">Failed to load announcements</p>
+                  <Button variant="outline" onClick={() => refetchAnnouncements()} className="mt-4">
+                    Retry
+                  </Button>
                 </div>
-              </div>
-              
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-medium">Updated Health and Safety Procedures</h3>
-                  <Badge className="bg-red-100 text-red-800 border-red-300 border">
-                    High
-                  </Badge>
+              ) : announcements.length === 0 ? (
+                <div className="text-center p-12">
+                  <Bell className="h-12 w-12 mx-auto text-muted-foreground opacity-40 mb-4" />
+                  <h3 className="text-lg font-medium">No announcements yet</h3>
+                  <p className="text-muted-foreground mt-1">
+                    Create a new announcement to get started
+                  </p>
                 </div>
-                <p className="text-sm">
-                  Following updated guidance from health authorities, we've revised our health 
-                  and safety procedures. Please review the attached document carefully and familiarize 
-                  yourself with the new drop-off and pick-up protocols starting next Monday.
-                </p>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Sent to: All Parents</span>
-                  <span>April 3, 2025</span>
-                </div>
-              </div>
-              
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-medium">Parent Volunteers Needed</h3>
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-300 border">
-                    Low
-                  </Badge>
-                </div>
-                <p className="text-sm">
-                  We're looking for parent volunteers to help with our upcoming garden project. 
-                  If you have experience with gardening or simply want to help out, please let us know. 
-                  We plan to plant vegetables and flowers with the children as part of our nature curriculum.
-                </p>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Sent to: All Parents</span>
-                  <span>March 28, 2025</span>
-                </div>
-              </div>
-              
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-medium">New Staff Introduction</h3>
-                  <Badge className="bg-green-100 text-green-800 border-green-300 border">
-                    Normal
-                  </Badge>
-                </div>
-                <p className="text-sm">
-                  We're pleased to welcome Ms. Jane Thompson to our team. Jane has over 10 years of 
-                  experience in early childhood education and will be joining the Butterflies room. 
-                  She's excited to meet all the children and their families in the coming days.
-                </p>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Sent to: All Parents</span>
-                  <span>March 25, 2025</span>
-                </div>
-              </div>
+              ) : (
+                announcements.map((announcement: any) => (
+                  <div key={announcement._id} className="border rounded-lg p-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-medium">{announcement.title}</h3>
+                      <Badge className={`
+                        ${announcement.priority === 'high' ? 'bg-red-100 text-red-800 border-red-300' : 
+                          announcement.priority === 'low' ? 'bg-blue-100 text-blue-800 border-blue-300' : 
+                          'bg-green-100 text-green-800 border-green-300'} border
+                      `}>
+                        {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)}
+                      </Badge>
+                    </div>
+                    <p className="text-sm">{announcement.content}</p>
+                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                      <span>Sent to: {announcement.recipients === 'all' ? 'All Parents' : 'Selected Parents'}</span>
+                      <span>{formatRelativeTime(announcement.createdAt)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -484,109 +615,27 @@ export default function Communication() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Children</SelectItem>
-                    <SelectItem value="emma">Emma Wilson</SelectItem>
-                    <SelectItem value="noah">Noah Smith</SelectItem>
-                    <SelectItem value="olivia">Olivia Davis</SelectItem>
-                    <SelectItem value="liam">Liam Johnson</SelectItem>
+                    {children.map((child: any) => (
+                      <SelectItem key={child._id} value={child._id}>
+                        {child.firstName} {child.lastName}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Progress Report</p>
-                    <p className="text-xs text-muted-foreground">Emma Wilson</p>
-                  </div>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Shared with: Michelle Wilson
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">April 7, 2025</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View Report
-                  </Button>
-                </CardContent>
-              </Card>
-              
-              <Card className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Quarterly Assessment</p>
-                    <p className="text-xs text-muted-foreground">Noah Smith</p>
-                  </div>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Shared with: Jessica Smith
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">April 5, 2025</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View Report
-                  </Button>
-                </CardContent>
-              </Card>
-              
-              <Card className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Development Summary</p>
-                    <p className="text-xs text-muted-foreground">Olivia Davis</p>
-                  </div>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Shared with: Sarah Davis
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">April 2, 2025</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View Report
-                  </Button>
-                </CardContent>
-              </Card>
-              
-              <Card className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Monthly Progress Report</p>
-                    <p className="text-xs text-muted-foreground">Liam Johnson</p>
-                  </div>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Shared with: Emily Johnson
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">March 25, 2025</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View Report
-                  </Button>
-                </CardContent>
-              </Card>
-              
-              <Card className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Reading Assessment</p>
-                    <p className="text-xs text-muted-foreground">Sophia Brown</p>
-                  </div>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Shared with: Rebecca Brown
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">March 20, 2025</p>
-                  <Button variant="outline" size="sm" className="w-full">
-                    View Report
-                  </Button>
-                </CardContent>
-              </Card>
+              <div className="text-center p-12 col-span-3">
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-40 mb-4" />
+                <h3 className="text-lg font-medium">No reports shared yet</h3>
+                <p className="text-muted-foreground mt-1">
+                  You'll see shared progress reports here once they're generated
+                </p>
+                <Button variant="outline" className="mt-4">
+                  <File className="h-4 w-4 mr-2" />
+                  Generate New Report
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

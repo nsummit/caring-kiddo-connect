@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ChevronDown,
   Download,
@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   User,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,105 +36,56 @@ import {
 } from "@/components/ui/dialog";
 import { ChildRegistrationForm } from "@/components/children/ChildRegistrationForm";
 import { ChildProfileCard } from "@/components/children/ChildProfileCard";
-
-// Mock data for children profiles
-const mockChildren = [
-  {
-    id: 1,
-    name: "Emma Wilson",
-    age: 4,
-    dob: "Jan 15, 2020",
-    parent: "Michelle Wilson",
-    contactNumber: "07700 900123",
-    medicalConditions: ["Mild Asthma"],
-    allergies: ["Peanuts"],
-    emergencyContacts: ["Michelle Wilson - 07700 900123", "John Wilson - 07700 900456"],
-    status: "active",
-  },
-  {
-    id: 2,
-    name: "Noah Smith",
-    age: 3,
-    dob: "Mar 23, 2021",
-    parent: "Jessica Smith",
-    contactNumber: "07700 900124",
-    medicalConditions: [],
-    allergies: ["Dairy"],
-    emergencyContacts: ["Jessica Smith - 07700 900124", "David Smith - 07700 900457"],
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Olivia Davis",
-    age: 4,
-    dob: "Nov 5, 2020",
-    parent: "Sarah Davis",
-    contactNumber: "07700 900125",
-    medicalConditions: [],
-    allergies: [],
-    emergencyContacts: ["Sarah Davis - 07700 900125", "Michael Davis - 07700 900458"],
-    status: "active",
-  },
-  {
-    id: 4,
-    name: "Liam Johnson",
-    age: 2,
-    dob: "Sep 10, 2022",
-    parent: "Emily Johnson",
-    contactNumber: "07700 900126",
-    medicalConditions: ["Eczema"],
-    allergies: [],
-    emergencyContacts: ["Emily Johnson - 07700 900126", "Robert Johnson - 07700 900459"],
-    status: "active",
-  },
-  {
-    id: 5,
-    name: "Sophia Brown",
-    age: 3,
-    dob: "Jul 20, 2021",
-    parent: "Rebecca Brown",
-    contactNumber: "07700 900127",
-    medicalConditions: [],
-    allergies: ["Eggs"],
-    emergencyContacts: ["Rebecca Brown - 07700 900127", "Thomas Brown - 07700 900460"],
-    status: "leaving",
-  },
-  {
-    id: 6,
-    name: "Lucas Taylor",
-    age: 4,
-    dob: "Feb 28, 2020",
-    parent: "Katherine Taylor",
-    contactNumber: "07700 900128",
-    medicalConditions: [],
-    allergies: [],
-    emergencyContacts: ["Katherine Taylor - 07700 900128", "James Taylor - 07700 900461"],
-    status: "new",
-  },
-];
+import { childrenApi } from "@/services/api";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Children() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [ageFilter, setAgeFilter] = useState<string>("all");
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  const { data: children = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['children'],
+    queryFn: childrenApi.getAllChildren,
+  });
+  
+  // Calculate age from DOB
+  const calculateAge = (dob: string) => {
+    const birthDate = new Date(dob);
+    const difference = Date.now() - birthDate.getTime();
+    const ageDate = new Date(difference);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+  };
   
   // Filter children based on search term and filters
-  const filteredChildren = mockChildren.filter((child) => {
-    const matchesSearch = child.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
+  const filteredChildren = children.filter((child: any) => {
+    const childAge = calculateAge(child.dob);
+    
+    const matchesSearch = child.firstName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          child.lastName.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = 
       statusFilter === "all" || child.status === statusFilter;
     
     const matchesAge = 
       ageFilter === "all" || 
-      (ageFilter === "2-3" && (child.age === 2 || child.age === 3)) ||
-      (ageFilter === "4-5" && (child.age === 4 || child.age === 5));
+      (ageFilter === "2-3" && (childAge === 2 || childAge === 3)) ||
+      (ageFilter === "4-5" && (childAge === 4 || childAge === 5));
     
     return matchesSearch && matchesStatus && matchesAge;
   });
+
+  const handleChildRegistration = async (childData: any) => {
+    try {
+      await childrenApi.createChild(childData);
+      refetch();
+      setIsDialogOpen(false);
+    } catch (error) {
+      // Error handling is done in the API service
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -144,7 +96,7 @@ export default function Children() {
             Manage children's profiles and registration details
           </p>
         </div>
-        <Dialog>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-kiddo-blue hover:bg-kiddo-blue-dark">
               <Plus className="mr-2 h-4 w-4" />
@@ -158,7 +110,7 @@ export default function Children() {
                 Fill in the details below to register a new child.
               </DialogDescription>
             </DialogHeader>
-            <ChildRegistrationForm />
+            <ChildRegistrationForm onSubmit={handleChildRegistration} />
           </DialogContent>
         </Dialog>
       </div>
@@ -204,26 +156,59 @@ export default function Children() {
             </Button>
           </div>
           
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex justify-center items-center p-12">
+              <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-lg text-muted-foreground">Loading children...</span>
+            </div>
+          )}
+          
+          {/* Error state */}
+          {isError && (
+            <div className="text-center p-12">
+              <p className="text-destructive text-lg">Failed to load children's data</p>
+              <Button variant="outline" onClick={() => refetch()} className="mt-4">
+                Retry
+              </Button>
+            </div>
+          )}
+          
           {/* Children Grid */}
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredChildren.map((child) => (
-              <ChildProfileCard 
-                key={child.id} 
-                child={child} 
-                onClick={() => setSelectedChild(child)}
-              />
-            ))}
-            
-            {filteredChildren.length === 0 && (
-              <div className="col-span-3 text-center p-12">
-                <User className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                <h3 className="mt-4 text-lg font-medium">No children found</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Try adjusting your search or filter criteria.
-                </p>
-              </div>
-            )}
-          </div>
+          {!isLoading && !isError && (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredChildren.map((child: any) => (
+                <ChildProfileCard 
+                  key={child._id} 
+                  child={{
+                    id: child._id,
+                    name: `${child.firstName} ${child.lastName}`,
+                    age: calculateAge(child.dob),
+                    dob: new Date(child.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+                    parent: `${child.parentDetails.firstName} ${child.parentDetails.lastName}`,
+                    contactNumber: child.parentDetails.contactNumber,
+                    medicalConditions: child.medicalDetails.conditions || [],
+                    allergies: child.medicalDetails.allergies || [],
+                    emergencyContacts: child.emergencyContacts.map((c: any) => 
+                      `${c.name} - ${c.contactNumber}`
+                    ),
+                    status: child.status,
+                  }}
+                  onClick={() => setSelectedChild(child)}
+                />
+              ))}
+              
+              {filteredChildren.length === 0 && (
+                <div className="col-span-3 text-center p-12">
+                  <User className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                  <h3 className="mt-4 text-lg font-medium">No children found</h3>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Try adjusting your search or filter criteria.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

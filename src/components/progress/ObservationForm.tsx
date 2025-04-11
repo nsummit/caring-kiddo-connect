@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,14 +21,67 @@ import { CalendarIcon, Image, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { childrenApi } from "@/services/api";
+import { useQuery } from "@tanstack/react-query";
 
-export function ObservationForm() {
+export function ObservationForm({ onSubmit }: { onSubmit: (data: any) => void }) {
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [childId, setChildId] = useState<string>("");
+  const [title, setTitle] = useState<string>("");
+  const [category, setCategory] = useState<string>("");
+  const [area, setArea] = useState<string>("");
+  const [details, setDetails] = useState<string>("");
+  const [nextSteps, setNextSteps] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   
-  const handleSubmit = (e: React.FormEvent) => {
+  // Fetch all children for the dropdown
+  const { 
+    data: children = [], 
+    isLoading: childrenLoading 
+  } = useQuery({
+    queryKey: ['children-observation'],
+    queryFn: childrenApi.getAllChildren,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Observation recorded successfully!");
-    // Reset form or close dialog
+    
+    if (!childId || !title || !category || !details) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const observationData = {
+        child: childId,
+        title,
+        date: date?.toISOString(),
+        category,
+        developmentArea: area || undefined,
+        details,
+        nextSteps: nextSteps || undefined,
+        mediaUrls: [], // In a real app, you would upload files and include URLs here
+      };
+      
+      await onSubmit(observationData);
+      resetForm();
+    } catch (error) {
+      // Error is handled in the parent component
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const resetForm = () => {
+    setDate(new Date());
+    setChildId("");
+    setTitle("");
+    setCategory("");
+    setArea("");
+    setDetails("");
+    setNextSteps("");
   };
 
   return (
@@ -36,17 +89,22 @@ export function ObservationForm() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <Label htmlFor="child">Select Child</Label>
-          <Select required>
+          <Select value={childId} onValueChange={setChildId} required>
             <SelectTrigger>
               <SelectValue placeholder="Select child" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="emma">Emma Wilson</SelectItem>
-              <SelectItem value="noah">Noah Smith</SelectItem>
-              <SelectItem value="olivia">Olivia Davis</SelectItem>
-              <SelectItem value="liam">Liam Johnson</SelectItem>
-              <SelectItem value="sophia">Sophia Brown</SelectItem>
-              <SelectItem value="lucas">Lucas Taylor</SelectItem>
+              {childrenLoading ? (
+                <SelectItem value="loading" disabled>Loading children...</SelectItem>
+              ) : children.length === 0 ? (
+                <SelectItem value="none" disabled>No children found</SelectItem>
+              ) : (
+                children.map((child: any) => (
+                  <SelectItem key={child._id} value={child._id}>
+                    {child.firstName} {child.lastName}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -80,12 +138,18 @@ export function ObservationForm() {
 
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="title">Observation Title</Label>
-          <Input id="title" placeholder="Enter a title for this observation" required />
+          <Input 
+            id="title" 
+            placeholder="Enter a title for this observation" 
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required 
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="category">Category</Label>
-          <Select required>
+          <Select value={category} onValueChange={setCategory} required>
             <SelectTrigger>
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
@@ -101,7 +165,7 @@ export function ObservationForm() {
 
         <div className="space-y-2">
           <Label htmlFor="area">Development Area</Label>
-          <Select>
+          <Select value={area} onValueChange={setArea}>
             <SelectTrigger>
               <SelectValue placeholder="Select area" />
             </SelectTrigger>
@@ -121,6 +185,8 @@ export function ObservationForm() {
             id="description"
             placeholder="Describe what you observed..."
             className="min-h-[120px]"
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
             required
           />
         </div>
@@ -149,6 +215,8 @@ export function ObservationForm() {
           id="next-steps"
           placeholder="Based on this observation, what are the next steps for this child's development?"
           className="min-h-[80px]"
+          value={nextSteps}
+          onChange={(e) => setNextSteps(e.target.value)}
         />
       </div>
 
@@ -156,8 +224,12 @@ export function ObservationForm() {
         <Button type="button" variant="outline">
           Cancel
         </Button>
-        <Button type="submit" className="bg-kiddo-blue hover:bg-kiddo-blue-dark">
-          Save Observation
+        <Button 
+          type="submit" 
+          className="bg-kiddo-blue hover:bg-kiddo-blue-dark"
+          disabled={isLoading}
+        >
+          {isLoading ? "Saving..." : "Save Observation"}
         </Button>
       </div>
     </form>
