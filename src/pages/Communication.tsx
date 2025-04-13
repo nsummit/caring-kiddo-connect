@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import {
   Bell,
@@ -9,6 +8,7 @@ import {
   Send,
   User,
   Loader2,
+  FileIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,9 +34,9 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function Communication() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyText, setReplyText] = useState("");
-  const [selectedParent, setSelectedParent] = useState<string>("");
+  const [selectedParent, setSelectedParent] = useState("");
   const [messageSubject, setMessageSubject] = useState("");
   const [messageContent, setMessageContent] = useState("");
   const [isNewMessageOpen, setIsNewMessageOpen] = useState(false);
@@ -47,7 +47,6 @@ export default function Communication() {
   
   const { user } = useAuth();
   
-  // Fetch all messages
   const { 
     data: messages = [], 
     isLoading: messagesLoading, 
@@ -58,7 +57,6 @@ export default function Communication() {
     queryFn: communicationApi.getAllMessages,
   });
   
-  // Fetch all announcements
   const { 
     data: announcements = [], 
     isLoading: announcementsLoading, 
@@ -69,7 +67,6 @@ export default function Communication() {
     queryFn: communicationApi.getAnnouncements,
   });
   
-  // Fetch all children (to get parent information)
   const { 
     data: children = [], 
     isLoading: childrenLoading 
@@ -78,7 +75,6 @@ export default function Communication() {
     queryFn: childrenApi.getAllChildren,
   });
   
-  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: communicationApi.sendMessage,
     onSuccess: () => {
@@ -88,7 +84,6 @@ export default function Communication() {
     }
   });
   
-  // Send reply mutation
   const sendReplyMutation = useMutation({
     mutationFn: communicationApi.sendMessage,
     onSuccess: () => {
@@ -97,7 +92,6 @@ export default function Communication() {
     }
   });
   
-  // Send announcement mutation
   const sendAnnouncementMutation = useMutation({
     mutationFn: communicationApi.sendAnnouncement,
     onSuccess: () => {
@@ -107,7 +101,6 @@ export default function Communication() {
     }
   });
   
-  // Reset form functions
   const resetMessageForm = () => {
     setSelectedParent("");
     setMessageSubject("");
@@ -120,7 +113,6 @@ export default function Communication() {
     setAnnouncementPriority("normal");
   };
   
-  // Extract unique parents from children data
   const parents = children.reduce((acc: any[], child: any) => {
     const parent = child.parentDetails;
     if (parent) {
@@ -137,7 +129,6 @@ export default function Communication() {
     return acc;
   }, []);
   
-  // Filter messages based on search term
   const filteredMessages = messages.filter((message: any) => {
     const content = message.content.toLowerCase();
     const subject = message.subject.toLowerCase();
@@ -147,7 +138,6 @@ export default function Communication() {
     return content.includes(search) || subject.includes(search) || senderName.includes(search);
   });
   
-  // Handle sending a new message
   const handleSendMessage = () => {
     if (!selectedParent || !messageSubject || !messageContent) {
       toast.error("Please fill in all fields");
@@ -162,7 +152,6 @@ export default function Communication() {
     });
   };
   
-  // Handle replying to a message
   const handleSendReply = () => {
     if (!replyText.trim() || !selectedMessage) return;
     
@@ -175,7 +164,6 @@ export default function Communication() {
     });
   };
   
-  // Handle sending an announcement
   const handleSendAnnouncement = () => {
     if (!announcementTitle || !announcementContent) {
       toast.error("Please fill in all fields");
@@ -190,7 +178,6 @@ export default function Communication() {
     });
   };
 
-  // Get child name from parent ID
   const getChildNameFromParent = (parentId: string) => {
     const childInfo = children.find((child: any) => 
       child.parentDetails && child.parentDetails._id === parentId
@@ -198,7 +185,6 @@ export default function Communication() {
     return childInfo ? `${childInfo.firstName} ${childInfo.lastName}` : "Unknown Child";
   };
   
-  // Format relative time
   const formatRelativeTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -615,7 +601,7 @@ export default function Communication() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Children</SelectItem>
-                    {children.map((child: any) => (
+                    {children.map((child) => (
                       <SelectItem key={child._id} value={child._id}>
                         {child.firstName} {child.lastName}
                       </SelectItem>
@@ -632,7 +618,7 @@ export default function Communication() {
                   You'll see shared progress reports here once they're generated
                 </p>
                 <Button variant="outline" className="mt-4">
-                  <File className="h-4 w-4 mr-2" />
+                  <FileIcon className="h-4 w-4 mr-2" />
                   Generate New Report
                 </Button>
               </div>
