@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,7 +40,8 @@ const Communication = () => {
         </div>
         <div>
           <Label htmlFor="attachments">Attachments:</Label>
-          <input type="file"
+          <input 
+            type="file"
             id="attachments"
             name="attachments"
             accept="image/*,application/pdf"
